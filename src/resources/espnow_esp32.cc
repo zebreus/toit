@@ -244,10 +244,11 @@ EspNowResource::~EspNowResource() {
       esp_now_deinit();
       [[fallthrough]];
     case State::WIFI_STARTED:
-      esp_wifi_stop();
+      // Dont teardown wifi
+      // esp_wifi_stop();
       [[fallthrough]];
     case State::WIFI_INITTED:
-      esp_wifi_deinit();
+      // esp_wifi_deinit();
       [[fallthrough]];
     case State::RX_QUEUE_ALLOCATED:
       vQueueDelete(rx_queue);
@@ -258,7 +259,7 @@ EspNowResource::~EspNowResource() {
       datagram_pool = NULL;
       [[fallthrough]];
     case State::ESPNOW_CLAIMED:
-      wifi_espnow_pool.put(id_);
+      // wifi_espnow_pool.put(id_);
       [[fallthrough]];
     case State::CONSTRUCTED:
       vQueueDelete(event_queue);
@@ -267,8 +268,7 @@ EspNowResource::~EspNowResource() {
 }
 
 Object* EspNowResource::init(Process* process, int mode, Blob pmk, wifi_phy_rate_t phy_rate) {
-  id_ = wifi_espnow_pool.any();
-  if (id_ == kInvalidWifiEspnow) FAIL(ALREADY_IN_USE);
+  id_ = 0;
 
   state_ = State::ESPNOW_CLAIMED;
 
@@ -289,24 +289,29 @@ Object* EspNowResource::init(Process* process, int mode, Blob pmk, wifi_phy_rate
   }
   state_ = State::RX_QUEUE_ALLOCATED;
 
-  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  wifi_mode_t wifi_mode = mode == 0 ? WIFI_MODE_STA : WIFI_MODE_AP;
+  // For now I just assume that WiFi is already setup by jaguar
+  // If it is not, commenting this will break stuff
+  
+  // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  // wifi_mode_t wifi_mode = mode == 0 ? WIFI_MODE_STA : WIFI_MODE_AP;
 
-  esp_err_t err = esp_wifi_init(&cfg);
-  if (err != ESP_OK) return Primitive::os_error(err, process);
-  state_ = State::WIFI_INITTED;
+  // err = esp_wifi_init(&cfg);
+  // if (err != ESP_OK) return Primitive::os_error(err, process);
+  // state_ = State::WIFI_INITTED;
 
-  err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
-  if (err != ESP_OK) return Primitive::os_error(err, process);
-  err = esp_wifi_set_mode(wifi_mode);
-  if (err != ESP_OK) return Primitive::os_error(err, process);
+  // err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+  // if (err != ESP_OK) return Primitive::os_error(err, process);
+  // err = esp_wifi_set_mode(wifi_mode);
+  // if (err != ESP_OK) return Primitive::os_error(err, process);
 
-  err = esp_wifi_start();
-  if (err != ESP_OK) return Primitive::os_error(err, process);
-  state_ = State::WIFI_STARTED;
+  // err = esp_wifi_start();
+  // if (err != ESP_OK) return Primitive::os_error(err, process);
+  // state_ = State::WIFI_STARTED;
 
+  esp_err_t err;
   wifi_interface_t interface = mode == 0 ? WIFI_IF_STA : WIFI_IF_AP;
-  err = esp_wifi_config_espnow_rate(interface, phy_rate);
+  err = esp_wifi_config_espnow_rate(WIFI_IF_STA, phy_rate);
+  err = esp_wifi_config_espnow_rate(WIFI_IF_AP, phy_rate);
   if (err != ESP_OK) return Primitive::os_error(err, process);
 
   err = esp_now_init();
@@ -438,7 +443,37 @@ PRIMITIVE(create) {
   group->register_resource(resource);
   proxy->set_external_address(resource);
 
-  esp_err_t err = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+  // uint8 primary_channel;
+  // wifi_second_chan_t secondary_channel;
+  // esp_err_t err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  // if (err != ESP_OK) {
+  //   ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
+  //   return Primitive::os_error(err, process);
+  // }
+
+  // Attention
+  // 1. This API should be called after esp_wifi_start() and before esp_wifi_stop()
+  // Attention
+  // 2. When device is in STA mode, this API should not be called when STA is scanning or connecting to an external AP
+  // Attention
+  // 3. When device is in softAP mode, this API should not be called when softAP has connected to external STAs
+  // Attention
+  // 4. When device is in STA+softAP mode, this API should not be called when in the scenarios described above
+
+  // err = esp_wifi_set_channel(primary_channel, WIFI_SECOND_CHAN_NONE);
+  // if (err != ESP_OK) {
+  //           ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
+
+  //   return Primitive::os_error(err, process);
+  // }
+
+  // Make sure the WiFi hardware does not sleep
+  esp_err_t err;
+  err = esp_now_set_wake_window(ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE);
+  if (err != ESP_OK) {
+    return Primitive::os_error(err, process);
+  }
+  err = esp_wifi_connectionless_module_set_wake_interval(ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
   }
