@@ -446,13 +446,13 @@ PRIMITIVE(create) {
   esp_err_t err;
 
   // Read the current wifi channel
-  uint8 primary_channel;
-  wifi_second_chan_t secondary_channel;
-  err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
-  if (err != ESP_OK) {
-    ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
-    return Primitive::os_error(err, process);
-  }
+  // uint8 primary_channel;
+  // wifi_second_chan_t secondary_channel;
+  // err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  // if (err != ESP_OK) {
+  //   ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
+  //   return Primitive::os_error(err, process);
+  // }
 
   // Attention
   // 1. This API should be called after esp_wifi_start() and before esp_wifi_stop()
@@ -466,10 +466,10 @@ PRIMITIVE(create) {
   // Opportunistically witch to channel 6 if we are on channel 0 (no channel, I think)
   // We just assume that we are not in one of the forbidden states listet above, when the primary channel is 0
   // Errors in set_channel are jsut ignored. 
-  if (primary_channel == 0) {
-    // This relies on esp_wifi_start() already havng been called somewhere else
-    esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
-  }
+  // if (primary_channel == 0) {
+  //   // This relies on esp_wifi_start() already havng been called somewhere else
+  //   esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
+  // }
 
   // Make sure the WiFi hardware does not sleep
   err = esp_now_set_wake_window(ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE);
