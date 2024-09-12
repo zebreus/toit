@@ -118,7 +118,9 @@ PRIMITIVE(bundled_images) {
 }
 
 PRIMITIVE(assets) {
-  Program* program = process->program();
+  const EmbeddedDataExtension* extension = EmbeddedData::extension();
+  // ID 1 is the jaguar image. This way everyone gets jaguars config, including the device name.
+  const Program* program = extension->image(1).program;
   word size;
   uint8* bytes;
   Object* result = null;
