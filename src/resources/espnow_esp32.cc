@@ -566,7 +566,7 @@ PRIMITIVE(add_peer) {
   esp_now_peer_info_t peer;
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
   // TODO: I could also set this to 0, which means current channel.
-  peer.channel = primary_channel;
+  peer.channel = 0;
   peer.ifidx = wifi_mode == WIFI_MODE_AP ? WIFI_IF_AP : WIFI_IF_STA;
   memcpy(&peer.peer_addr, mac.address(), ESP_NOW_ETH_ALEN);
   if (key.length()) {
