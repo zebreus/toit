@@ -82,7 +82,7 @@ class WifiResourceGroup : public ResourceGroup {
       RtcMemory::set_wifi_channel(0);
     }
 
-    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) return err;
 
     wifi_config_t config;
@@ -109,7 +109,7 @@ class WifiResourceGroup : public ResourceGroup {
   }
 
   esp_err_t establish(const char* ssid, const char* password, bool broadcast, int channel) {
-    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_AP);
+    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) return err;
 
     wifi_config_t config;
@@ -130,7 +130,7 @@ class WifiResourceGroup : public ResourceGroup {
   }
 
   esp_err_t init_scan(void) {
-    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) return err;
 
     reconnects_remaining_ = 0;

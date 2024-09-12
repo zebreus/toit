@@ -443,13 +443,16 @@ PRIMITIVE(create) {
   group->register_resource(resource);
   proxy->set_external_address(resource);
 
-  // uint8 primary_channel;
-  // wifi_second_chan_t secondary_channel;
-  // esp_err_t err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
-  // if (err != ESP_OK) {
-  //   ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
-  //   return Primitive::os_error(err, process);
-  // }
+  esp_err_t err;
+
+  // Read the current wifi channel
+  uint8 primary_channel;
+  wifi_second_chan_t secondary_channel;
+  err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  if (err != ESP_OK) {
+    ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
+    return Primitive::os_error(err, process);
+  }
 
   // Attention
   // 1. This API should be called after esp_wifi_start() and before esp_wifi_stop()
@@ -460,15 +463,15 @@ PRIMITIVE(create) {
   // Attention
   // 4. When device is in STA+softAP mode, this API should not be called when in the scenarios described above
 
-  // err = esp_wifi_set_channel(primary_channel, WIFI_SECOND_CHAN_NONE);
-  // if (err != ESP_OK) {
-  //           ESP_ERROR_CHECK_WITHOUT_ABORT(errno);
-
-  //   return Primitive::os_error(err, process);
-  // }
+  // Opportunistically witch to channel 6 if we are on channel 0 (no channel, I think)
+  // We just assume that we are not in one of the forbidden states listet above, when the primary channel is 0
+  // Errors in set_channel are jsut ignored. 
+  if (primary_channel == 0) {
+    // This relies on esp_wifi_start() already havng been called somewhere else
+    esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
+  }
 
   // Make sure the WiFi hardware does not sleep
-  esp_err_t err;
   err = esp_now_set_wake_window(ESP_WIFI_CONNECTIONLESS_INTERVAL_DEFAULT_MODE);
   if (err != ESP_OK) {
     return Primitive::os_error(err, process);
@@ -553,9 +556,17 @@ PRIMITIVE(add_peer) {
   esp_err_t err = esp_wifi_get_mode(&wifi_mode);
   if (err != ESP_OK) return Primitive::os_error(err, process);
 
+  uint8 primary_channel;
+  wifi_second_chan_t secondary_channel;
+  err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  if (err != ESP_OK || primary_channel == 0){
+    primary_channel = 6;
+  }
+  
   esp_now_peer_info_t peer;
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
-  peer.channel = channel;
+  // TODO: I could also set this to 0, which means current channel.
+  peer.channel = primary_channel;
   peer.ifidx = wifi_mode == WIFI_MODE_AP ? WIFI_IF_AP : WIFI_IF_STA;
   memcpy(&peer.peer_addr, mac.address(), ESP_NOW_ETH_ALEN);
   if (key.length()) {
