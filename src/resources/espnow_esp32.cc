@@ -17,6 +17,7 @@
 
 #if defined(TOIT_ESP32) && defined(CONFIG_TOIT_ENABLE_ESPNOW)
 
+#include <esp_log.h>
 #include <esp_wifi.h>
 #include <esp_event.h>
 #include <esp_netif.h>
@@ -24,6 +25,8 @@
 #include <esp_log.h>
 
 #include "wifi_espnow_esp32.h"
+#include "../rtc_memory_esp32.h"
+
 
 #include "../objects_inline.h"
 #include "../process.h"
@@ -292,10 +295,11 @@ Object* EspNowResource::init(Process* process, int mode, Blob pmk, wifi_phy_rate
   // For now I just assume that WiFi is already setup by jaguar
   // If it is not, commenting this will break stuff
   
-  // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   // wifi_mode_t wifi_mode = mode == 0 ? WIFI_MODE_STA : WIFI_MODE_AP;
+  esp_err_t err;
 
-  // err = esp_wifi_init(&cfg);
+  err = esp_wifi_init(&cfg);
   // if (err != ESP_OK) return Primitive::os_error(err, process);
   // state_ = State::WIFI_INITTED;
 
@@ -304,11 +308,10 @@ Object* EspNowResource::init(Process* process, int mode, Blob pmk, wifi_phy_rate
   // err = esp_wifi_set_mode(wifi_mode);
   // if (err != ESP_OK) return Primitive::os_error(err, process);
 
-  // err = esp_wifi_start();
+  err = esp_wifi_start();
   // if (err != ESP_OK) return Primitive::os_error(err, process);
   // state_ = State::WIFI_STARTED;
 
-  esp_err_t err;
   wifi_interface_t interface = mode == 0 ? WIFI_IF_STA : WIFI_IF_AP;
   err = esp_wifi_config_espnow_rate(WIFI_IF_STA, phy_rate);
   err = esp_wifi_config_espnow_rate(WIFI_IF_AP, phy_rate);
@@ -486,16 +489,78 @@ PRIMITIVE(create) {
 
 PRIMITIVE(close) {
   ARGS(EspNowResource, resource);
-  resource->resource_group()->unregister_resource(resource);
-  resource_proxy->clear_external_address();
+  // resource->resource_group()->unregister_resource(resource);
+  // resource_proxy->clear_external_address();
   return process->null_object();
 }
 
 PRIMITIVE(send) {
   ARGS(EspNowResource, resource, Blob, mac, Blob, data);
+  esp_err_t err;
+  // wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  // wifi_mode_t wifi_mode = mode == 0 ? WIFI_MODE_STA : WIFI_MODE_AP;
 
-  esp_err_t err = esp_now_send(mac.address(), data.address(), data.length());
-  if (err != ESP_OK) return Primitive::os_error(err, process);
+  // err = esp_wifi_init(&cfg);
+  // // if (err != ESP_OK) return Primitive::os_error(err, process);
+  // // state_ = State::WIFI_INITTED;
+
+  // // err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+  // // if (err != ESP_OK) return Primitive::os_error(err, process);
+  // // err = esp_wifi_set_mode(wifi_mode);
+  // // if (err != ESP_OK) return Primitive::os_error(err, process);
+
+  // err = esp_wifi_start();
+
+  // esp_now_init();
+
+  esp_wifi_scan_stop();
+  wifi_country_t country;
+  country.cc[0] = 'X';
+  country.cc[1] = 'X';
+  country.cc[2] = 0;
+  country.schan = 6;
+  country.nchan = 1;
+  country.max_tx_power = 84;
+  country.policy = WIFI_COUNTRY_POLICY_MANUAL;
+
+
+  uint8 channel = RtcMemory::wifi_channel();
+  if (channel != 6){
+    channel = 6;
+    RtcMemory::set_wifi_channel(6);
+  }
+
+  uint8 primary_channel;
+  wifi_second_chan_t secondary_channel;
+  err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  // if (err != ESP_OK || primary_channel == 0){
+  //   primary_channel = 6;
+  // }
+
+  esp_now_peer_info_t peer;
+  esp_now_get_peer(mac.address(), &peer);
+
+  ESP_LOGE("Shitty debugging hardcoded into the firmware", "store %i peer %i primary %i", channel,primary_channel, peer.channel);
+  printf("store %i peer %i primary %i", channel,primary_channel, peer.channel);
+
+
+  if (primary_channel != channel){
+    ESP_LOGE("Shitty debugging hardcoded into the firmware", "Fixing channel");
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+  }
+
+
+  peer.channel = channel;
+  esp_now_mod_peer(&peer);
+
+
+  err = esp_now_send(mac.address(), data.address(), data.length());
+  if (err != ESP_OK) {
+      tx_status = ESP_NOW_SEND_SUCCESS;
+      auto event = EspNowEvent::SEND_DONE;
+      auto ret = xQueueSend(event_queue, &event, 0);
+      // return Primitive::os_error(err, process);
+  }
 
   return process->null_object();
 }
@@ -556,17 +621,18 @@ PRIMITIVE(add_peer) {
   esp_err_t err = esp_wifi_get_mode(&wifi_mode);
   if (err != ESP_OK) return Primitive::os_error(err, process);
 
-  uint8 primary_channel;
-  wifi_second_chan_t secondary_channel;
-  err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
-  if (err != ESP_OK || primary_channel == 0){
-    primary_channel = 6;
-  }
+  // uint8 primary_channel;
+  // wifi_second_chan_t secondary_channel;
+  // err = esp_wifi_get_channel(&primary_channel, &secondary_channel);
+  // if (err != ESP_OK || primary_channel == 0){
+  //   primary_channel = 6;
+  // }
+  uint8 storedChannel = RtcMemory::wifi_channel();
   
   esp_now_peer_info_t peer;
   memset(&peer, 0, sizeof(esp_now_peer_info_t));
   // TODO: I could also set this to 0, which means current channel.
-  peer.channel = 0;
+  peer.channel = storedChannel;
   peer.ifidx = wifi_mode == WIFI_MODE_AP ? WIFI_IF_AP : WIFI_IF_STA;
   memcpy(&peer.peer_addr, mac.address(), ESP_NOW_ETH_ALEN);
   if (key.length()) {

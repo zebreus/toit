@@ -194,9 +194,9 @@ class WifiModule implements NetworkModule:
   static WIFI-RETRY        ::= 1 << 4
   static WIFI-SCAN-DONE    ::= 1 << 5
 
-  static WIFI-RETRY-DELAY_     ::= Duration --s=1
-  static WIFI-CONNECT-TIMEOUT_ ::= Duration --s=24
-  static WIFI-DHCP-TIMEOUT_    ::= Duration --s=16
+  static WIFI-RETRY-DELAY_     ::= Duration --s=25
+  static WIFI-CONNECT-TIMEOUT_ ::= Duration --s=45
+  static WIFI-DHCP-TIMEOUT_    ::= Duration --s=35
 
   logger_/log.Logger ::= log.default.with-name "wifi"
   service/WifiServiceProvider
@@ -268,20 +268,16 @@ class WifiModule implements NetworkModule:
           logger_.debug "connected"
           wifi-events_.set-callback:: on-event_ it
           return
-        else if (state & WIFI-RETRY) != 0:
+        else:
           // We will be creating a new ResourceState object on the next
           // iteration, so we need to dispose the one from this attempt.
-          wifi-events_.dispose
-          wifi-events_ = null
-          reason ::= wifi-disconnect-reason_ resource
-          logger_.info "retrying" --tags={"reason": reason}
-          wifi-disconnect_ resource-group_ resource
-          sleep WIFI-RETRY-DELAY_
-          continue
-        else if (state & WIFI-DISCONNECTED) != 0:
-          reason ::= wifi-disconnect-reason_ resource
-          logger_.warn "connect failed" --tags={"reason": reason}
-          throw "CONNECT_FAILED: $reason"
+          // wifi-events_.dispose
+          // wifi-events_ = null
+          // reason ::= wifi-disconnect-reason_ resource
+          sleep --ms=60000
+
+          logger_.error "retrying" --tags={"reason": "idk, something"}
+          throw "HACKY_RETRY_SLEEP_ERROR: some reason"
     finally: | is-exception exception |
       if is-exception and exception.value == DEADLINE-EXCEEDED-ERROR:
         logger_.warn "connect failed" --tags={"reason": "timeout"}

@@ -16,6 +16,7 @@
 #include "../top.h"
 
 #ifdef TOIT_ESP32
+#include <esp_log.h>
 
 #include <esp_wifi.h>
 #include <nvs_flash.h>
@@ -78,8 +79,8 @@ class WifiResourceGroup : public ResourceGroup {
     // If there has been no previous connection, then the channel is 0 which causes a normal scan.
     uint8 channel = RtcMemory::wifi_channel();
     if (channel > 13) {
-      channel = 0;
-      RtcMemory::set_wifi_channel(0);
+      channel = 6;
+      RtcMemory::set_wifi_channel(6);
     }
 
     esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
@@ -89,12 +90,19 @@ class WifiResourceGroup : public ResourceGroup {
     memset(&config, 0, sizeof(config));
     strncpy(char_cast(config.sta.ssid), ssid, sizeof(config.sta.ssid) - 1);
     strncpy(char_cast(config.sta.password), password, sizeof(config.sta.password) - 1);
-    config.sta.channel = channel;
-    config.sta.scan_method = (channel == 0)
-        ? WIFI_ALL_CHANNEL_SCAN
-        : WIFI_FAST_SCAN;
+    config.sta.channel = 6;
+    config.sta.scan_method = WIFI_FAST_SCAN;
     err = esp_wifi_set_config(WIFI_IF_STA, &config);
     if (err != ESP_OK) return err;
+
+    // config.ap.channel = 6;
+    // config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    // config.ap.ssid_hidden = 0;
+    // config.ap.max_connection = 1;
+    // config.ap.beacon_interval = 1000;
+    // config.ap.pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+    // err = esp_wifi_set_config(WIFI_IF_AP, &config);
+    // if (err != ESP_OK) return err;
 
     // When connecting to Android mobile hotspot APs, we
     // quite often get WIFI_REASON_AUTH_FAIL followed by
@@ -109,6 +117,7 @@ class WifiResourceGroup : public ResourceGroup {
   }
 
   esp_err_t establish(const char* ssid, const char* password, bool broadcast, int channel) {
+    channel = 6;
     esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
     if (err != ESP_OK) return err;
 
@@ -138,22 +147,27 @@ class WifiResourceGroup : public ResourceGroup {
   }
 
   esp_err_t start_scan(bool passive, int channel, uint32_t period_ms) {
-    wifi_scan_config_t config{};
+    // wifi_scan_config_t config{};
 
-    config.channel = channel;
-    if (passive) {
-      config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
-      config.scan_time.passive = period_ms;
-    } else {
-      config.scan_time.active.max = period_ms;
-      config.scan_time.active.min = period_ms;
-    }
+    // config.channel = 6;
+    // passive = true;
+    // if (passive) {
+    //   config.scan_type = WIFI_SCAN_TYPE_PASSIVE;
+    //   config.scan_time.passive = period_ms;
+    // } else {
+    //   config.scan_time.active.max = period_ms;
+    //   config.scan_time.active.min = period_ms;
+    // }
 
-    return esp_wifi_scan_start(&config, false);
+    // return esp_wifi_scan_start(&config, false);
+    return 0;
   }
 
   ~WifiResourceGroup() {
-    FATAL_IF_NOT_ESP_OK(esp_wifi_deinit());
+    ESP_LOGE("WIFI PATCH", "Would have destroyed netif: ~WifiResourceGroup");
+    // Both removed: E (149520) ESPNOW: esp now not init!
+    
+    // FATAL_IF_NOT_ESP_OK(esp_wifi_deinit());
     esp_netif_destroy_default_wifi(netif_);
   }
 
@@ -262,6 +276,7 @@ uint32 WifiResourceGroup::on_event_wifi(Resource* resource, word data, uint32 st
           break;
       }
 
+      reconnect = false;
       bool reconnecting = false;
       if (reconnect && reconnects_remaining_ > 0) {
         reconnects_remaining_--;
@@ -440,7 +455,8 @@ PRIMITIVE(init) {
 
   esp_err_t err = nvs_flash_init();
   if (err != ESP_OK) {
-    esp_netif_destroy_default_wifi(netif);
+    ESP_LOGE("WIFI PATCH", "Would have destroyed netif: nvs_flash_init");
+    // esp_netif_destroy_default_wifi(netif);
     return Primitive::os_error(err, process);
   }
 
@@ -456,20 +472,23 @@ PRIMITIVE(init) {
   }
   err = esp_wifi_init(&init_config);
   if (err != ESP_OK) {
-    esp_netif_destroy_default_wifi(netif);
-    return Primitive::os_error(err, process);
+    ESP_LOGE("WIFI PATCH", "Would have destroyed netif: esp_wifi_init");
+    // esp_netif_destroy_default_wifi(netif);
+    // return Primitive::os_error(err, process);
   }
 
   err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
   if (err != ESP_OK) {
-    FATAL_IF_NOT_ESP_OK(esp_wifi_deinit());
-    esp_netif_destroy_default_wifi(netif);
-    return Primitive::os_error(err, process);
+    ESP_LOGE("WIFI PATCH", "Would have destroyed netif: esp_wifi_set_storage");
+    // FATAL_IF_NOT_ESP_OK(esp_wifi_deinit());
+    // esp_netif_destroy_default_wifi(netif);
+    // return Primitive::os_error(err, process);
   }
 
   WifiResourceGroup* resource_group = _new WifiResourceGroup(
       process, SystemEventSource::instance(), 0, netif);
   if (!resource_group) {
+    ESP_LOGE("Shitty debugging hardcoded into the firmware", "#################################### 3829");
     FATAL_IF_NOT_ESP_OK(esp_wifi_deinit());
     esp_netif_destroy_default_wifi(netif);
     FAIL(MALLOC_FAILED);
